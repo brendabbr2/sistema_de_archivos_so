@@ -1,13 +1,16 @@
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
 #include "memory_manager.h"
 
 // Inicializa el sistema de archivos
-void init_filesystem(FileSystem* fs) {
+void init_filesystem(FileSystem *fs) {
     fs->file_count = 0;
     memset(fs->block_bitmap, 0, sizeof(fs->block_bitmap));
 }
 
 // Encuentra bloques libres y los marca como ocupados
-int allocate_blocks(FileSystem* fs, int blocks_needed, int* allocated) {
+int allocate_blocks(FileSystem *fs, int blocks_needed, int *allocated) {
     int count = 0;
     for (int i = 0; i < MAX_BLOCKS && count < blocks_needed; i++) {
         if (fs->block_bitmap[i] == 0) {
@@ -19,15 +22,15 @@ int allocate_blocks(FileSystem* fs, int blocks_needed, int* allocated) {
 }
 
 // Crea un archivo
-int create_file(FileSystem* fs, const char* name, int size) {
+int create_file(FileSystem *fs, const char *name, int size) {
     if (fs->file_count >= MAX_FILES) return -1;
 
-    int blocks_needed = (size + BLOCK_SIZE - 1) / BLOCK_SIZE; // Redondeo hacia arriba
+    int blocks_needed = (size + BLOCK_SIZE - 1) / BLOCK_SIZE;
     int allocated[blocks_needed];
 
     if (allocate_blocks(fs, blocks_needed, allocated) == -1) return -1;
 
-    File* file = &fs->files[fs->file_count++];
+    File *file = &fs->files[fs->file_count++];
     strcpy(file->name, name);
     file->size = size;
     file->block_count = blocks_needed;
@@ -37,12 +40,11 @@ int create_file(FileSystem* fs, const char* name, int size) {
 }
 
 // Escribe datos en un archivo
-int write_file(FileSystem* fs, const char* name, int offset, const char* data) {
+int write_file(FileSystem *fs, const char *name, int offset, const char *data) {
     for (int i = 0; i < fs->file_count; i++) {
         if (strcmp(fs->files[i].name, name) == 0) {
             if (offset + strlen(data) > fs->files[i].size) return -1; // Fuera de límites
-            
-            // Escribe los datos en el buffer del archivo
+
             memcpy(&fs->files[i].data[offset], data, strlen(data));
             return 0;
         }
@@ -50,14 +52,12 @@ int write_file(FileSystem* fs, const char* name, int offset, const char* data) {
     return -1; // Archivo no encontrado
 }
 
-
 // Lee datos de un archivo
-int read_file(FileSystem* fs, const char* name, int offset, int size) {
+int read_file(FileSystem *fs, const char *name, int offset, int size) {
     for (int i = 0; i < fs->file_count; i++) {
         if (strcmp(fs->files[i].name, name) == 0) {
             if (offset + size > fs->files[i].size) return -1; // Fuera de límites
-            
-            // Imprimir los datos leídos
+
             printf("Salida: \"%.*s\"\n", size, &fs->files[i].data[offset]);
             return 0;
         }
@@ -65,9 +65,8 @@ int read_file(FileSystem* fs, const char* name, int offset, int size) {
     return -1; // Archivo no encontrado
 }
 
-
 // Elimina un archivo
-int delete_file(FileSystem* fs, const char* name) {
+int delete_file(FileSystem *fs, const char *name) {
     for (int i = 0; i < fs->file_count; i++) {
         if (strcmp(fs->files[i].name, name) == 0) {
             for (int j = 0; j < fs->files[i].block_count; j++) {
@@ -81,7 +80,7 @@ int delete_file(FileSystem* fs, const char* name) {
 }
 
 // Lista los archivos
-void list_files(FileSystem* fs) {
+void list_files(FileSystem *fs) {
     if (fs->file_count == 0) {
         printf("(no hay archivos)\n");
         return;
@@ -90,59 +89,123 @@ void list_files(FileSystem* fs) {
         printf("%s - %d bytes\n", fs->files[i].name, fs->files[i].size);
     }
 }
+
+// Guarda el estado del sistema de archivos en un archivo binario
+void save_file_system(FileSystem *fs, const char *filename) {
+    FILE *file = fopen(filename, "wb");
+    if (!file) {
+        perror("Error al abrir el archivo");
+        return;
+    }
+    if (fwrite(fs, sizeof(FileSystem), 1, file) != 1) {
+        perror("Error al escribir el sistema de archivos");
+    }
+    fclose(file);
+}
+
+// Carga el estado del sistema de archivos desde un archivo binario
+void load_file_system(FileSystem *fs, const char *filename) {
+    FILE *file = fopen(filename, "rb");
+    if (!file) { // Si el archivo no existe, inicializa un nuevo sistema
+        printf("Archivo no encontrado. Creando un nuevo sistema de archivos...\n");
+        init_filesystem(fs);
+        save_file_system(fs, filename); // Guarda el nuevo sistema
+        return;
+    }
+    if (fread(fs, sizeof(FileSystem), 1, file) != 1) {
+        perror("Error al leer el sistema de archivos");
+        init_filesystem(fs); // Si hay error, reinicia el sistema de archivos
+    }
+    fclose(file);
+}
 /*
 // Programa principal
 int main() {
     FileSystem fs;
-    init_filesystem(&fs);
+    const char *filesystem_file = "filesystem.dat";
 
-    // Prueba de creación de archivos
-    if (create_file(&fs, "archivo1.txt", 1000) == 0) {
-        printf("Archivo 'archivo1.txt' creado exitosamente.\n");
-    } else {
-        printf("Error al crear 'archivo1.txt'.\n");
-    }
+    // Cargar el sistema de archivos desde el archivo, o crear uno nuevo si no existe
+    load_file_system(&fs, filesystem_file);
 
-    if (create_file(&fs, "archivo2.txt", 500) == 0) {
-        printf("Archivo 'archivo2.txt' creado exitosamente.\n");
-    } else {
-        printf("Error al crear 'archivo2.txt'.\n");
-    }
-
-    // Listar archivos creados
+    // Prueba de creación, escritura, lectura y eliminación
+    create_file(&fs, "archivo1.txt", 1000);
+    write_file(&fs, "archivo1.txt", 0, "Hola, mundo");
+    read_file(&fs, "archivo1.txt", 0, 11);
     list_files(&fs);
 
-    // Probar la creación de un archivo que exceda el límite
-    for (int i = 0; i < MAX_FILES; i++) {
-        char filename[20];
-        sprintf(filename, "archivo%d.txt", i + 3); // Crear más archivos
-        if (create_file(&fs, filename, 100) == -1) {
-            printf("Error al crear '%s', se alcanzó el límite de archivos.\n", filename);
-            break; // Salir del bucle si no se puede crear más archivos
-        }
-    }
-
-    // Listar archivos nuevamente para verificar
+    delete_file(&fs, "archivo1.txt");
     list_files(&fs);
+
+    // Guardar el estado actualizado del sistema de archivos
+    save_file_system(&fs, filesystem_file);
 
     return 0;
 }
 */
 
+void handle_command(FileSystem *fs) {
+    char command[256];
 
+    printf("Sistema de archivos interactivo.\n");
+    printf("Comandos disponibles:\n");
+    printf("CREATE nombre tamaño\n");
+    printf("WRITE nombre offset \"contenido\"\n");
+    printf("READ nombre offset tamaño\n");
+    printf("DELETE nombre\n");
+    printf("LIST\n");
+    printf("Escribe 'exit' para salir.\n");
 
-// Programa principal
+    while (1) {
+        printf("> ");
+        if (!fgets(command, sizeof(command), stdin)) break;
+
+        // Eliminar el salto de línea al final del comando
+        command[strcspn(command, "\n")] = '\0';
+
+        // Verificar si el usuario quiere salir
+        if (strcmp(command, "exit") == 0) break;
+
+        char *args[10];
+        int argc = 0;
+
+        // Separar la línea en palabras
+        char *token = strtok(command, " ");
+        while (token != NULL && argc < 10) {
+            args[argc++] = token;
+            token = strtok(NULL, " ");
+        }
+
+        if (argc == 0) continue;
+
+        if (strcmp(args[0], "CREATE") == 0 && argc == 3) {
+            if (create_file(fs, args[1], atoi(args[2])) == 0)
+                printf("Archivo '%s' creado exitosamente.\n", args[1]);
+            else
+                printf("Error al crear '%s'.\n", args[1]);
+        } else if (strcmp(args[0], "WRITE") == 0 && argc == 4) {
+            if (write_file(fs, args[1], atoi(args[2]), args[3]) == 0)
+                printf("Datos escritos en '%s'.\n", args[1]);
+            else
+                printf("Error al escribir en '%s'.\n", args[1]);
+        } else if (strcmp(args[0], "READ") == 0 && argc == 4) {
+            if (read_file(fs, args[1], atoi(args[2]), atoi(args[3])) != 0)
+                printf("Error al leer '%s'.\n", args[1]);
+        } else if (strcmp(args[0], "DELETE") == 0 && argc == 2) {
+            if (delete_file(fs, args[1]) == 0)
+                printf("Archivo '%s' eliminado.\n", args[1]);
+            else
+                printf("Error al eliminar '%s'.\n", args[1]);
+        } else if (strcmp(args[0], "LIST") == 0) {
+            list_files(fs);
+        } else {
+            printf("Comando no reconocido.\n");
+        }
+    }
+}
+
 int main() {
     FileSystem fs;
     init_filesystem(&fs);
-
-    create_file(&fs, "archivo1.txt", 1000);
-    write_file(&fs, "archivo1.txt", 0, "Hola, mundo");
-    read_file(&fs, "archivo1.txt", 0, 11);
-    list_files(&fs);
-    delete_file(&fs, "archivo1.txt");
-    list_files(&fs);
-
+    handle_command(&fs);
     return 0;
 }
-

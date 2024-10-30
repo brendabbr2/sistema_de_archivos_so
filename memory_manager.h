@@ -1,26 +1,22 @@
 #ifndef MEMORY_MANAGER_H
 #define MEMORY_MANAGER_H
 
-#include <stdio.h>
-#include <stdlib.h>
-#include <string.h>
-
-#define MAX_BLOCKS 128 // Tamaño máximo para los bloques
-#define BLOCK_SIZE 256 // Tamaño de bloque 
-#define MAX_FILES 100 // Número máximo de archivos
+#define MAX_BLOCKS 100
+#define MAX_FILES 10
+#define BLOCK_SIZE 512
 
 typedef struct {
-    char name[32];
+    char name[100];
     int size;
     int block_count;
-    int blocks[MAX_BLOCKS]; // Índices de bloques ocupados
-    char data[MAX_BLOCKS * BLOCK_SIZE]; // Almacenamiento de datos
+    int blocks[MAX_BLOCKS];  // Índices de bloques asignados
+    char data[BLOCK_SIZE * 10];  // Asumiendo que cada archivo puede tener varios bloques
 } File;
 
 typedef struct {
-    File files[MAX_FILES];
     int file_count;
-    char block_bitmap[MAX_BLOCKS]; // Bitmap para bloques
+    File files[MAX_FILES];  // Array de archivos
+    int block_bitmap[MAX_BLOCKS];  // Bitmap para bloques libres y ocupados
 } FileSystem;
 
 // Prototipos de funciones
