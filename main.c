@@ -1,5 +1,32 @@
 #include "memory_manager.h"
-#include "hashmap.h"
+
+// memory_manager.c
+int allocate_blocks(FileSystem *fs, int blocks_needed, int *allocated) {
+    int count = 0;
+    for (int i = 0; i < MAX_BLOCKS && count < blocks_needed; i++) {
+        if (fs->block_bitmap[i] == 0) {
+            fs->block_bitmap[i] = 1;
+            allocated[count++] = i;
+        }
+    }
+    return (count == blocks_needed) ? 0 : -1;
+}
+
+void load_file_system(FileSystem *fs, const char *filename) {
+    FILE *file = fopen(filename, "rb");
+    if (file) {
+        fread(fs, sizeof(FileSystem), 1, file);
+        fclose(file);
+    }
+}
+
+void save_file_system(FileSystem *fs, const char *filename) {
+    FILE *file = fopen(filename, "wb");
+    if (file) {
+        fwrite(fs, sizeof(FileSystem), 1, file);
+        fclose(file);
+    }
+}
 
 void init_filesystem(FileSystem *fs) {
     fs->file_count = 0;
@@ -23,6 +50,7 @@ int create_file(FileSystem *fs, const char *name, int size) {
 
     hashmap_insert(&fs->file_map, name, fs->file_count);  // Insertar en el hashmap
     fs->file_count++;
+    save_file_system(fs, "filesystem.bin");
     return 0;
 }
 
@@ -34,6 +62,7 @@ int write_file(FileSystem *fs, const char *name, int offset, const char *data) {
     if (offset + strlen(data) > file->size) return -1;
 
     memcpy(&file->data[offset], data, strlen(data));
+    save_file_system(fs, "filesystem.bin");
     return 0;
 }
 
@@ -59,15 +88,33 @@ int delete_file(FileSystem *fs, const char *name) {
 
     hashmap_remove(&fs->file_map, name);  // Eliminar del hashmap
     fs->files[index] = fs->files[--fs->file_count];
+    save_file_system(fs, "filesystem.bin");
     return 0;
 }
 
 void list_files(FileSystem *fs) {
     printf("Archivos en el sistema:\n");
-    for (int i = 0; i < fs->file_count; i++) {
-        printf("  - %s (Tamaño: %d bytes)\n", fs->files[i].name, fs->files[i].size);
+    printf("-----------------------------------------------------------------------------------\n");
+    printf("| %-20s | %-15s | %-15s | %-15s |\n", "Nombre", "Tamaño (bloques/bytes)", "Espacio ocupado (bloques)", "Espacio ocupado (bytes)");
+    printf("-----------------------------------------------------------------------------------\n");
+
+    for (int i = 0; i < HASHMAP_SIZE; i++) {
+        HashNode *node = fs->file_map.buckets[i];
+        while (node) {
+            File *file = &fs->files[node->file_index];
+            int blocks_needed = (file->size + BLOCK_SIZE - 1) / BLOCK_SIZE;
+            int occupied_space_bytes = file->block_count * BLOCK_SIZE;
+
+            printf("| %-20s | %4d bloques / %5d bytes | %9d bloques        | %11d bytes     |\n",
+                   file->name, blocks_needed, file->size, file->block_count, occupied_space_bytes);
+
+            node = node->next;
+        }
     }
+
+    printf("-----------------------------------------------------------------------------------\n");
 }
+
 void handle_command(FileSystem *fs) {
     char command[256];
 

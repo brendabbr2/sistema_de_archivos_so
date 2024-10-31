@@ -1,7 +1,6 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
-#include "./memory_manager.h"
 
 // ------------------ Estructuras -------------------
 #define HASHMAP_SIZE 256  // Tamaño del hashmap
@@ -16,14 +15,6 @@ typedef struct {
     HashNode *buckets[HASHMAP_SIZE];  // Array de punteros a nodos
 } HashMap;
 
-/*Funciones del hashmap
-unsigned int hash(const char *key);
-void hashmap_init(HashMap *map);
-void hashmap_insert(HashMap *map, const char *key, int file_index);
-int hashmap_get(HashMap *map, const char *key);
-void hashmap_remove(HashMap *map, const char *key);
-void hashmap_free(HashMap *map);
-*/
 // ----------------- Funciones ----------------------
 
 // Función de hash simple basada en suma de caracteres
