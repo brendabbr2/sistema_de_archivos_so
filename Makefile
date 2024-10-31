@@ -20,3 +20,7 @@ clean:
 run: $(TARGET)
 	./$(TARGET)
 
+# Regla para ejecutar prueba
+test: $(TARGET)
+	./$(TARGET) --test ./test.txt
+

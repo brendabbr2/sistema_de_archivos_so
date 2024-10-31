@@ -1,4 +1,5 @@
 #include "memory_manager.h"
+#include <stdbool.h>
 
 // Función para contar la cantidad de bytes usados por cada carácter en data, excluyendo \0
 int count_non_null_bytes(File *file) {
@@ -164,7 +165,7 @@ void list_files(FileSystem *fs) {
     printf("----------------------------------------------------------------------------------------------------------\n");
 }
 
-void handle_command(FileSystem *fs) {
+void handle_command(FileSystem *fs, FILE *input) {
     char command[256];
 
     printf("Sistema de archivos interactivo.\n");
@@ -176,10 +177,23 @@ void handle_command(FileSystem *fs) {
     printf("LIST\n");
     printf("Escribe 'exit' para salir.\n");
 
-    while (1) {
-        printf("> ");
-        if (!fgets(command, sizeof(command), stdin)) break;
+    bool is_test_mode = (input != stdin);  // Verificar si estamos en modo de prueba
+
+    while (true) {
+
+        // Si estamos en modo de prueba, imprimir el comando en amarillo
+        if (!is_test_mode) {
+            printf("> ");
+        }
+
+        
+        if (!fgets(command, sizeof(command), input)) break;
         command[strcspn(command, "\n")] = '\0';  // Remueve el salto de línea
+
+        // Si estamos en modo de prueba, imprimir el comando en amarillo
+        if (is_test_mode) {
+            printf("\033[1;33mEjecutando comando de prueba:\n%s\033[0m\n", command);
+        }
 
         char *args[5];  // Espacio para hasta 5 partes del comando
         int argc = 0;
@@ -195,6 +209,8 @@ void handle_command(FileSystem *fs) {
             }
             token = strtok(NULL, " ");
         }
+
+        
 
         if (argc == 0) continue;  // Comando vacío
         if (strcmp(args[0], "exit") == 0) break;  // Salir del bucle
@@ -229,11 +245,25 @@ void handle_command(FileSystem *fs) {
         }
     }
 }
-int main() {
+
+int main(int argc, char *argv[]) {
     FileSystem fs;
     init_filesystem(&fs);
     load_file_system(&fs, "filesystem.bin");
-    handle_command(&fs);
+
+    // Verificar si el parámetro --test está presente
+    if (argc == 3 && strcmp(argv[1], "--test") == 0) {
+        FILE *input_file = fopen(argv[2], "r");
+        if (!input_file) {
+            perror("Error al abrir el archivo de prueba");
+            return 1;
+        }
+        handle_command(&fs, input_file);  // Pasar el archivo a handle_command
+        fclose(input_file);
+    } else {
+        handle_command(&fs, stdin);  // Pasar stdin para modo interactivo
+    }
+
     save_file_system(&fs, "filesystem.bin");
     return 0;
 }
