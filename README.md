@@ -1,5 +1,11 @@
 # Sistema de Archivos Simple
 
+Integrantes:
+- Brenda Badilla Rodríguez, 2020065241
+- Joctan Porras Esquivel, 2021069671
+  
+[Enlace del github](https://github.com/brendabbr2/sistema_de_archivos_so/tree/main)
+
 ## Compilación y Ejecución ⚙️
    ```bash
 make clean
