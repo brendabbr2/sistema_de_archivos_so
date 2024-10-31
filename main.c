@@ -14,18 +14,46 @@ int allocate_blocks(FileSystem *fs, int blocks_needed, int *allocated) {
 
 void load_file_system(FileSystem *fs, const char *filename) {
     FILE *file = fopen(filename, "rb");
-    if (file) {
-        fread(fs, sizeof(FileSystem), 1, file);
-        fclose(file);
+    if (!file) {
+        perror("Error al abrir el archivo para cargar el sistema de archivos");
+        return;
     }
+
+    // Cargar la estructura completa del FileSystem
+    fread(fs, sizeof(FileSystem), 1, file);
+
+    // Cargar la cantidad de nodos en el hashmap
+    fread(&fs->file_map.node_count, sizeof(int), 1, file);
+
+    // Cargar los nodos en el array `nodes`
+    fread(fs->file_map.nodes, sizeof(HashNode), fs->file_map.node_count, file);
+
+    // Cargar el array `buckets`
+    fread(fs->file_map.buckets, sizeof(int), HASHMAP_SIZE, file);
+
+    fclose(file);
 }
 
 void save_file_system(FileSystem *fs, const char *filename) {
     FILE *file = fopen(filename, "wb");
-    if (file) {
-        fwrite(fs, sizeof(FileSystem), 1, file);
-        fclose(file);
+    if (!file) {
+        perror("Error al abrir el archivo para guardar el sistema de archivos");
+        return;
     }
+
+    // Guardar la estructura completa del FileSystem
+    fwrite(fs, sizeof(FileSystem), 1, file);
+
+    // Guardar la cantidad de nodos en el hashmap
+    fwrite(&fs->file_map.node_count, sizeof(int), 1, file);
+
+    // Guardar los nodos en el array `nodes`
+    fwrite(fs->file_map.nodes, sizeof(HashNode), fs->file_map.node_count, file);
+
+    // Guardar el array `buckets`
+    fwrite(fs->file_map.buckets, sizeof(int), HASHMAP_SIZE, file);
+
+    fclose(file);
 }
 
 void init_filesystem(FileSystem *fs) {
@@ -95,20 +123,25 @@ int delete_file(FileSystem *fs, const char *name) {
 void list_files(FileSystem *fs) {
     printf("Archivos en el sistema:\n");
     printf("-----------------------------------------------------------------------------------\n");
-    printf("| %-20s | %-15s | %-15s | %-15s |\n", "Nombre", "Tamaño (bloques/bytes)", "Espacio ocupado (bloques)", "Espacio ocupado (bytes)");
+    printf("| %-20s | %-21s | %-23s |\n", "Nombre", "Tamaño (bloques / bytes)", "Tamaño real usado (bytes)");
     printf("-----------------------------------------------------------------------------------\n");
 
+    // Recorremos cada bucket en el hashmap
     for (int i = 0; i < HASHMAP_SIZE; i++) {
-        HashNode *node = fs->file_map.buckets[i];
-        while (node) {
+        int node_index = fs->file_map.buckets[i];
+        
+        // Recorremos los nodos en el bucket usando los índices
+        while (node_index != -1) {
+            HashNode *node = &fs->file_map.nodes[node_index];
             File *file = &fs->files[node->file_index];
             int blocks_needed = (file->size + BLOCK_SIZE - 1) / BLOCK_SIZE;
-            int occupied_space_bytes = file->block_count * BLOCK_SIZE;
 
-            printf("| %-20s | %4d bloques / %5d bytes | %9d bloques        | %11d bytes     |\n",
-                   file->name, blocks_needed, file->size, file->block_count, occupied_space_bytes);
+            // Muestra el nombre, tamaño en bloques/bytes y el tamaño real de los datos usados
+            printf("| %-20s | %5d bloques / %5d bytes | %19d bytes        |\n",
+                   file->name, blocks_needed, file->size, file->size);
 
-            node = node->next;
+            // Mover al siguiente nodo en la lista del bucket
+            node_index = node->next_index;
         }
     }
 

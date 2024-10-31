@@ -12,14 +12,18 @@
 // ------------------ Estructuras -------------------
 #define HASHMAP_SIZE 256  // Tamaño del hashmap
 
+#define HASHNODE_MAX 1024  // Número máximo de nodos permitidos
+
 typedef struct HashNode {
     char key[256];           // Nombre del archivo (clave)
     int file_index;          // Índice del archivo en el array de archivos
-    struct HashNode *next;   // Colisión (lista enlazada)
+    int next_index;          // Índice del siguiente nodo en el array, -1 si no hay siguiente
 } HashNode;
 
 typedef struct {
-    HashNode *buckets[HASHMAP_SIZE];  // Array de punteros a nodos
+    HashNode nodes[HASHNODE_MAX];  // Array de nodos
+    int buckets[HASHMAP_SIZE];     // Índices a los primeros nodos de cada bucket
+    int node_count;                // Contador de nodos utilizados
 } HashMap;
 
 
@@ -53,65 +57,66 @@ unsigned int hash(const char *key) {
 }
 
 void hashmap_init(HashMap *map) {
-    memset(map->buckets, 0, sizeof(map->buckets));
+    memset(map->buckets, -1, sizeof(map->buckets));
+    map->node_count = 0;
 }
 
 void hashmap_insert(HashMap *map, const char *key, int file_index) {
-    unsigned int index = hash(key);
-    HashNode *new_node = (HashNode *)malloc(sizeof(HashNode));  
-    if (!new_node) {
-        fprintf(stderr, "Error al asignar memoria para HashNode\n");
-        exit(EXIT_FAILURE);
+    if (map->node_count >= HASHNODE_MAX) {
+        fprintf(stderr, "Error: Excedido el límite de nodos en HashMap.\n");
+        return;
     }
-    
-    strcpy(new_node->key, key);
-    new_node->file_index = file_index;
-    new_node->next = map->buckets[index];
-    map->buckets[index] = new_node;
+
+    unsigned int index = hash(key);
+    int new_node_index = map->node_count++;
+
+    // Inicializa el nuevo nodo
+    strcpy(map->nodes[new_node_index].key, key);
+    map->nodes[new_node_index].file_index = file_index;
+    map->nodes[new_node_index].next_index = map->buckets[index];
+
+    // Apunta el bucket al nuevo nodo
+    map->buckets[index] = new_node_index;
 }
 
 int hashmap_get(HashMap *map, const char *key) {
     unsigned int index = hash(key);
-    HashNode *node = map->buckets[index];
+    int node_index = map->buckets[index];
 
-    while (node) {
-        if (strcmp(node->key, key) == 0) {
-            return node->file_index;
+    while (node_index != -1) {
+        if (strcmp(map->nodes[node_index].key, key) == 0) {
+            return map->nodes[node_index].file_index;
         }
-        node = node->next;
+        node_index = map->nodes[node_index].next_index;
     }
-    return -1;  // No se encontró la clave
+    return -1;
 }
 
 void hashmap_remove(HashMap *map, const char *key) {
     unsigned int index = hash(key);
-    HashNode *node = map->buckets[index];
-    HashNode *prev = NULL;
+    int *node_index = &map->buckets[index];
+    int prev_index = -1;
 
-    while (node) {
-        if (strcmp(node->key, key) == 0) {
-            if (prev) {
-                prev->next = node->next;
+    while (*node_index != -1) {
+        if (strcmp(map->nodes[*node_index].key, key) == 0) {
+            if (prev_index != -1) {
+                map->nodes[prev_index].next_index = map->nodes[*node_index].next_index;
             } else {
-                map->buckets[index] = node->next;
+                map->buckets[index] = map->nodes[*node_index].next_index;
             }
-            free(node);
             return;
         }
-        prev = node;
-        node = node->next;
+        prev_index = *node_index;
+        node_index = &map->nodes[*node_index].next_index;
     }
 }
 
 void hashmap_free(HashMap *map) {
-    for (int i = 0; i < HASHMAP_SIZE; i++) {
-        HashNode *node = map->buckets[i];
-        while (node) {
-            HashNode *temp = node;
-            node = node->next;
-            free(temp);
-        }
-    }
+    // Restablece cada bucket a -1, indicando que no hay nodos
+    memset(map->buckets, -1, sizeof(map->buckets));
+    
+    // Reinicia el contador de nodos a 0
+    map->node_count = 0;
 }
 
 void init_filesystem(FileSystem *fs);
