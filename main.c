@@ -1,5 +1,19 @@
 #include "memory_manager.h"
 
+// Función para contar la cantidad de bytes usados por cada carácter en data, excluyendo \0
+int count_non_null_bytes(File *file) {
+    int byte_count = 0;
+
+    // Recorremos hasta file->size, que es el tamaño real del contenido en data
+    for (int i = 0; i < file->size; i++) {
+        if (file->data[i] != '\0') {  // Solo contamos si el byte no es '\0'
+            byte_count++;
+        }
+    }
+    
+    return byte_count;
+}
+
 // memory_manager.c
 int allocate_blocks(FileSystem *fs, int blocks_needed, int *allocated) {
     int count = 0;
@@ -122,9 +136,9 @@ int delete_file(FileSystem *fs, const char *name) {
 
 void list_files(FileSystem *fs) {
     printf("Archivos en el sistema:\n");
-    printf("-----------------------------------------------------------------------------------\n");
-    printf("| %-20s | %-21s | %-23s |\n", "Nombre", "Tamaño (bloques / bytes)", "Tamaño real usado (bytes)");
-    printf("-----------------------------------------------------------------------------------\n");
+    printf("----------------------------------------------------------------------------------------------------------\n");
+    printf("| %-20s | %-21s | %-23s | %-23s |\n", "Nombre", "Tamaño (bloques / bytes)", "Bytes usados", "Bytes libres");
+    printf("----------------------------------------------------------------------------------------------------------\n");
 
     // Recorremos cada bucket en el hashmap
     for (int i = 0; i < HASHMAP_SIZE; i++) {
@@ -135,17 +149,19 @@ void list_files(FileSystem *fs) {
             HashNode *node = &fs->file_map.nodes[node_index];
             File *file = &fs->files[node->file_index];
             int blocks_needed = (file->size + BLOCK_SIZE - 1) / BLOCK_SIZE;
+            int used_bytes = count_non_null_bytes(file);  // Bytes diferentes de '\0'
+            int free_bytes = file->size - used_bytes;     // Bytes que son '\0'
 
-            // Muestra el nombre, tamaño en bloques/bytes y el tamaño real de los datos usados
-            printf("| %-20s | %5d bloques / %5d bytes | %19d bytes        |\n",
-                   file->name, blocks_needed, file->size, file->size);
+            // Muestra el nombre, tamaño en bloques/bytes, bytes usados y bytes libres
+            printf("| %-20s | %5d bloques / %5d bytes | %19d bytes | %19d bytes |\n",
+                   file->name, blocks_needed, file->size, used_bytes, free_bytes);
 
             // Mover al siguiente nodo en la lista del bucket
             node_index = node->next_index;
         }
     }
 
-    printf("-----------------------------------------------------------------------------------\n");
+    printf("----------------------------------------------------------------------------------------------------------\n");
 }
 
 void handle_command(FileSystem *fs) {
@@ -163,45 +179,56 @@ void handle_command(FileSystem *fs) {
     while (1) {
         printf("> ");
         if (!fgets(command, sizeof(command), stdin)) break;
-        command[strcspn(command, "\n")] = '\0';
+        command[strcspn(command, "\n")] = '\0';  // Remueve el salto de línea
 
-        char *args[4];
+        char *args[5];  // Espacio para hasta 5 partes del comando
         int argc = 0;
+
+        // Separar el primer argumento (comando) y siguientes hasta llegar a "contenido" o el final
         char *token = strtok(command, " ");
-        while (token && argc < 4) {
+        while (token && argc < 5) {
             args[argc++] = token;
+            if (argc == 3 && strcmp(args[0], "WRITE") == 0) {
+                // Para WRITE, tomar el contenido completo a partir del tercer argumento
+                args[argc++] = strtok(NULL, "\"");
+                break;
+            }
             token = strtok(NULL, " ");
         }
 
-        if (argc == 0) continue;
-        if (strcmp(args[0], "exit") == 0) break;
+        if (argc == 0) continue;  // Comando vacío
+        if (strcmp(args[0], "exit") == 0) break;  // Salir del bucle
 
+        // Manejo de los diferentes comandos con validación de argumentos
         if (strcmp(args[0], "CREATE") == 0 && argc == 3) {
-            if (create_file(fs, args[1], atoi(args[2])) == 0)
+            int size = atoi(args[2]);
+            if (create_file(fs, args[1], size) == 0)
                 printf("Archivo '%s' creado.\n", args[1]);
             else
                 printf("Error al crear '%s'.\n", args[1]);
         } else if (strcmp(args[0], "WRITE") == 0 && argc == 4) {
-            if (write_file(fs, args[1], atoi(args[2]), args[3]) == 0)
+            int offset = atoi(args[2]);
+            if (write_file(fs, args[1], offset, args[3]) == 0)
                 printf("Datos escritos en '%s'.\n", args[1]);
             else
                 printf("Error al escribir en '%s'.\n", args[1]);
         } else if (strcmp(args[0], "READ") == 0 && argc == 4) {
-            if (read_file(fs, args[1], atoi(args[2]), atoi(args[3])) != 0)
+            int offset = atoi(args[2]);
+            int size = atoi(args[3]);
+            if (read_file(fs, args[1], offset, size) != 0)
                 printf("Error al leer '%s'.\n", args[1]);
         } else if (strcmp(args[0], "DELETE") == 0 && argc == 2) {
             if (delete_file(fs, args[1]) == 0)
                 printf("Archivo '%s' eliminado.\n", args[1]);
             else
                 printf("Error al eliminar '%s'.\n", args[1]);
-        } else if (strcmp(args[0], "LIST") == 0) {
+        } else if (strcmp(args[0], "LIST") == 0 && argc == 1) {
             list_files(fs);
         } else {
-            printf("Comando no reconocido.\n");
+            printf("Comando no reconocido o argumentos incorrectos.\n");
         }
     }
 }
-
 int main() {
     FileSystem fs;
     init_filesystem(&fs);
